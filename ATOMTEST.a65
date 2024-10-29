@@ -73,11 +73,6 @@ START:
             LDA     # %10000000 ; 
             STA     pia + 0 ; 
 
-            LDA     #$80 
-            STA     LINEH 
-            LDA     #$60 
-            STA     LINEL 
-
 BLANK_SCREEN:        ; Clear Screen memory
 
             LDX     #0 ; Starting index
@@ -158,7 +153,12 @@ IO_LOOP:
 ; 0000-03FF Low RAM
 ; 0400-0FFF I/O devices
 ; 1000-1FFF I/O devices
-; 2800-38FF Main RAM
+; 2800   RAM     2114       ICs 10&ll
+; 2C00   RAM     2114       ICs 12&13
+; 3000   RAM     2114       ICs 14&15 
+; 3400   RAM     2114       ICs 16&17 
+; 3800   RAM     2114       ICs 18&19
+; 3C00   For RAM expansion off board
 ; 8000-97FF Screen memory
 ; 9800-9FFF Default RAM
 ; A000-AFFF Econet/Extension ROM
@@ -178,6 +178,10 @@ IO_LOOP:
 
             JSR     DISPLAY_INTRO 
 
+            LDA     #$80 
+            STA     LINEH 
+            LDA     #$60 
+            STA     LINEL
 RAM_TESTING:         
 
 ; Set up test variables in zero page for the memory test
@@ -191,7 +195,7 @@ RAM_TESTING:
             LDA     #$40
             STA     PASSL 
             LDA     #$80 
-            STA     PASSH 
+            STA     PASSH
 
 PAGE:                ; Test main memory
             LDA     #$55 
@@ -364,19 +368,32 @@ ERROR:               ; Memory error detected
                        
             
             LDA     TEMP2
-            STA     $8020
+            LDX     #0
+            STA     (LINEL,X)
             LDA     TEMP3
-            STA     $8021
-            LDA     TEMP4
-            STA     $8023
+            INC     LINEL
+            STA     (LINEL,X)
+            LDA     TEMP4          
+            INC     LINEL
+            INC     LINEL
+            STA     (LINEL,X)
             LDA     TEMP5
-            STA     $8024
+            INC     LINEL
+            STA     (LINEL,X)
             LDA     TEMP6
-            STA     $8025
+            INC     LINEL
+            STA     (LINEL,X)
             LDA     TEMP7
-            STA     $8026
-            
-            
+            INC     LINEL
+            STA     (LINEL,X)
+            LDA     LINEL
+            CLC
+            ADC     #26
+            STA     LINEL
+            BCC     Over
+            INC     LINEH            
+Over:
+
             PLA      ; Y register.
             TAY      ; "   "   "
             PLA      ; X register.
