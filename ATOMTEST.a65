@@ -1,0 +1,456 @@
+            .CPU    6502 
+; ATOM TEST
+;
+; Inspired by Dave Roberts PETTEST diagnostic rom for the CBM PET
+;
+; Developed using Atomulator
+;
+; November 2024
+; Gary Clark
+; Northwest computer museum
+; Park Lane 
+; Leigh Spinners Mills
+; Leigh 
+; WN7 2LB
+; England
+
+
+KERNALROM   EQU     $F000 
+IRQ         EQU     $FFFE 
+RESET       EQU     $FFFC 
+NMI         EQU     $FFFA 
+
+LOWRAM      EQU     $0000 ;-03FF Low RAM
+IO          EQU     $0400 ;-0FFF I/O devices
+IO2         EQU     $1000 ;-1FFF I/O devices
+MAINRAM     EQU     $2000 ;-7FFF Main RAM
+SCREENRAM   EQU     $8000 ;-97FF Screen memory
+DEFAULTRAM  EQU     $9800 ;-9FFF Default RAM
+
+RAM0        EQU     $0000 ;  block 0.
+RAM1        EQU     $0100 ;  block 1.
+RAM2        EQU     $0200 ;  block 2.
+RAM3        EQU     $0300 ;  block 3.
+
+VDU0        EQU     $8000 
+VDU1        EQU     $8100 
+VDU2        EQU     $8200 
+VDU3        EQU     $8300 
+VDU4        EQU     $8400 
+VDU5        EQU     $8500 
+VDU6        EQU     $8600 
+VDU7        EQU     $8700 
+PIA         EQU     $B000 ;  PIA base address
+
+MEML        EQU     $10 
+MEMH        EQU     $11 
+PASSL       EQU     $12 
+PASSH       EQU     $13 
+POSN        EQU     $14 
+TEMP1       EQU     $15 
+TEMP2       EQU     $16 
+TEMP3       EQU     $17 
+TEMP4       EQU     $18 
+TEMP5       EQU     $19 
+TEMP6       EQU     $1A 
+TEMP7       EQU     $1B 
+LINEL       EQU     $20 
+LINEH       EQU     $21 
+
+            .ORG    reset 
+            DB      $00 
+            DB      $f0
+
+            .ORG    KERNALROM 
+START:               
+            LDX     #$FF 
+            TXS      
+            SEI      
+            CLD      
+
+            LDA     # %10000000 ; Port A,B & C to output
+            STA     pia + 3 ; Write to PIA control port
+            LDA     # %10000000 ; 
+            STA     pia + 0 ; 
+
+            LDA     #$80 
+            STA     LINEH 
+            LDA     #$60 
+            STA     LINEL 
+
+BLANK_SCREEN:        ; Clear Screen memory
+
+            LDX     #0 ; Starting index
+VDU_WRITE:           
+            LDA     #32 
+            STA     VDU0,x ; block 0.
+            STA     VDU1,x ; block 1.
+            STA     VDU2,x ; block 2.
+            STA     VDU3,x ; block 3.
+            STA     VDU4,x ; block 0.
+            STA     VDU5,x ; block 1.
+            STA     VDU6,x ; block 2.
+            STA     VDU7,x ; block 3.
+
+            INX      ; Move on to the next location
+            BNE     VDU_WRITE ; Keep looping until we have finished.
+
+TEST_LOW_RAM:        ; test first 1K of memory
+
+            LDX     #0 ; Starting index
+WRITE:               
+            TXA      
+            STA     RAM0,x ; block 0.
+            STA     RAM1,x ; block 1.
+            STA     RAM2,x ; block 2.
+            STA     RAM3,x ; block 3.
+            INX      ; Move on to the next location
+            BNE     WRITE ; Keep looping until we have finished.
+; 
+; 
+            LDX     #0 ; Index.
+READ:                
+            TXA      
+            CMP     RAM0,x ; Check block 0.
+            BNE     READ ; If not the same, keep looping.
+            CMP     RAM1,x ; Check block 1.
+            BNE     READ ; If not the same, keep looping.
+            CMP     RAM2,x ; Check block 2.
+            BNE     READ ; If not the same, keep looping.
+            CMP     RAM3,x ; Check block 3.
+            BNE     READ ; If not the same, keep looping.
+            INX      ; Move on to the next location
+            BNE     READ ; Keep looping until we have finished.
+
+
+; Setup 8255 and test outputs
+
+            LDA     # %10000000 ; Port A,B & C to output
+            STA     pia + 3 ; Write to PIA control port
+
+            LDX     #0 
+            LDY     #0
+IO_LOOP:             
+            TXA      
+            STA     pia + 0 ; Write binary pattern to Port A
+            STA     pia + 1 ; Write binary pattern to Port B
+            STA     pia + 2 ; Write binary pattern to Port C
+            INX     
+            JSR     delay           
+            BNE     IO_loop
+            INY
+            INY
+            INY
+            INY
+            BNE     IO_loop
+
+; Setup 8255 to put the VDG into text mode
+
+; AS = C6
+; Int= C6
+; INV= C7
+; GM2= PA7
+; GM1= PA6
+; GM0= Pa5
+; AG = PA4
+
+; Memory map
+; 0000-03FF Low RAM
+; 0400-0FFF I/O devices
+; 1000-1FFF I/O devices
+; 2800-38FF Main RAM
+; 8000-97FF Screen memory
+; 9800-9FFF Default RAM
+; A000-AFFF Econet/Extension ROM
+; B000-BFFF I/O
+; C000-CFFF BASIC ROM
+; D000-DFFF Floating point ROM
+; E000-EFFF DOS/Econet ROM
+; F000-FFFF Kernal ROM
+
+            LDA     #%10001010 
+            STA     pia + 3 
+            LDA     #%00000111 
+            STA     pia + 2 
+            LDA     #%00000000 
+            STA     pia + 1 
+            STA     pia + 0 
+
+            JSR     DISPLAY_INTRO 
+
+RAM_TESTING:         
+
+; Set up test variables in zero page for the memory test
+
+            LDX     #$0 
+            LDA     #$00 
+            STA     MEML 
+            STA     POSN 
+            LDA     #$28 
+            STA     MEMH 
+            LDA     #$40
+            STA     PASSL 
+            LDA     #$80 
+            STA     PASSH 
+
+PAGE:                ; Test main memory
+            LDA     #$55 
+            STA     (MEML,X) 
+            LDA     (MEML,X) 
+            CMP     #$55 
+            BEQ     OVER1
+            STA     TEMP1
+            JSR     ERROR 
+OVER1:               
+            LDA     #$AA 
+            STA     (MEML,X) 
+            LDA     (MEML,X) 
+            CMP     #$AA 
+            BEQ     OVER2 
+            STA     TEMP1
+            JSR     ERROR 
+OVER2:               
+            LDA     #$00 
+            STA     (MEML,X) 
+            LDA     (MEML,X) 
+            CMP     #$00 
+            BEQ     OVER3
+            STA     TEMP1
+            JSR     ERROR 
+OVER3:               
+            LDA     #$FF 
+            STA     (MEML,X) 
+            LDA     (MEML,X) 
+            CMP     #$FF 
+            BEQ     OVER4
+            STA     TEMP1
+            JSR     ERROR 
+OVER4:               
+            LDA     #$F0 
+            STA     (MEML,X) 
+            LDA     (MEML,X) 
+            CMP     #$F0 
+            BEQ     OVER5
+            STA     TEMP1
+            JSR     ERROR 
+OVER5:               
+            LDA     #$0F 
+            STA     (MEML,X) 
+            LDA     (MEML,X) 
+            CMP     #$0F
+            BEQ     OVER6
+            STA     TEMP1
+            JSR     ERROR 
+OVER6:               
+
+; Location tested and erros printed out, onto the next
+
+            INC     MEML 
+            BNE     PAGE 
+            JSR     DISPLAY_RAM_PASS 
+            INC     MEMH 
+            LDA     MEMH 
+            CMP     #$3C 
+            BEQ     COMPLETE 
+            JMP     PAGE 
+
+COMPLETE:            
+
+            JMP     RAM_TESTING 
+
+; ------------------------------------------------------------------------------------------
+Delay:
+            PHP      ; Save the flags onto the stack.
+            PHA      ; Save register "A" onto the stack.
+            TXA      ; Store register "X" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+            TYA      ; Store register "Y" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+
+            LDX     #0
+
+loop:       
+            INX
+            BNE loop
+
+            PLA      ; Y register.
+            TAY      ; "   "   "
+            PLA      ; X register.
+            TAX      ; "   "   "
+            PLA      ; "A" register.
+            PLP      ; Flag register.
+            RTS            
+; ------------------------------------------------------------------------------------------
+ERROR:               ; Memory error detected
+
+            PHP      ; Save the flags onto the stack.
+            PHA      ; Save register "A" onto the stack.
+            TXA      ; Store register "X" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+            TYA      ; Store register "Y" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+
+            LDA     TEMP1 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            STA     TEMP2 
+            LDA     TEMP1 
+            AND     #%00001111 
+            STA     TEMP3 
+
+            LDA     MEMH 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            STA     TEMP4 
+            LDA     MEMH 
+            AND     #%00001111 
+            STA     TEMP5 
+
+            LDA     MEML 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            STA     TEMP6 
+            LDA     MEML 
+            AND     #%00001111 
+            STA     TEMP7 
+
+            LDA     TEMP2
+            TAX
+            LDA     LINE3,X
+            STA     TEMP2
+            
+            LDA     TEMP3
+            TAX
+            LDA     LINE3,X
+            STA     TEMP3
+            
+            LDA     TEMP4
+            TAX
+            LDA     LINE3,X
+            STA     TEMP4
+            
+            LDA     TEMP5
+            TAX
+            LDA     LINE3,X
+            STA     TEMP5
+            
+            LDA     TEMP6
+            TAX
+            LDA     LINE3,X
+            STA     TEMP6
+            
+            LDA     TEMP7
+            TAX
+            LDA     LINE3,X
+            STA     TEMP7
+                       
+            
+            LDA     TEMP2
+            STA     $8020
+            LDA     TEMP3
+            STA     $8021
+            LDA     TEMP4
+            STA     $8023
+            LDA     TEMP5
+            STA     $8024
+            LDA     TEMP6
+            STA     $8025
+            LDA     TEMP7
+            STA     $8026
+            
+            
+            PLA      ; Y register.
+            TAY      ; "   "   "
+            PLA      ; X register.
+            TAX      ; "   "   "
+            PLA      ; "A" register.
+            PLP      ; Flag register.
+            RTS      
+; ------------------------------------------------------------------------------------------
+DISPLAY_INTRO:       
+
+            PHP      ; Save the flags onto the stack.
+            PHA      ; Save register "A" onto the stack.
+            TXA      ; Store register "X" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+            TYA      ; Store register "Y" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+
+            LDX     #$00 
+MESSAGE1:            
+            LDA     LINE1,X 
+            SEC      
+            SBC     #$40 ; Convert ASCII to screen code
+
+            STA     VDU0,X 
+            INX      
+            TXA      
+            CMP     #19 
+            BNE     MESSAGE1 
+
+            PLA      ; Y register.
+            TAY      ; "   "   "
+            PLA      ; X register.
+            TAX      ; "   "   "
+            PLA      ; "A" register.
+            PLP      ; Flag register.
+            RTS      
+
+; ------------------------------------------------------------------------------------------
+DISPLAY_RAM_PASS:    
+
+            PHP      ; Save the flags onto the stack.
+            PHA      ; Save register "A" onto the stack.
+            TXA      ; Store register "X" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+            TYA      ; Store register "Y" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+
+            LDA     #0 
+            TAX      
+            LDA     #43 
+            STA     (PASSL,X) 
+            INC     PASSL
+            LDA     #$20
+            STA     (PASSL,X)
+
+            PLA      ; Y register.
+            TAY      ; "   "   "
+            PLA      ; X register.
+            TAX      ; "   "   "
+            PLA      ; "A" register.
+            PLP      ; Flag register.
+            RTS      
+
+
+; ------------------------------------------------------------------------------------------
+LINE1:               
+;                    1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
+            DB      "A","C","O","R","N",$60,"A","T","O","M",$60,"D","I","A","G",$60 
+            DB      "R","O","M" 
+
+LINE2:               
+;                    0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15 
+            DB      "0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F" 
+
+;                    0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F 
+LINE3:      DB      $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$01,$02,$03,$04,$05,$06     
+
