@@ -1,4 +1,6 @@
-            .CPU    6502 
+          .CPU    6502 
+          .binfrom $F000
+
 ; ATOM TEST
 ;
 ; Inspired by Dave Roberts PETTEST diagnostic rom for the CBM PET
@@ -13,6 +15,12 @@
 ; Leigh 
 ; WN7 2LB
 ; England
+;
+; Date    : 30 November 2024
+; Version : 0.1
+; Author  : G Clark
+; Changes : Initial Alpha verison
+;           just about works.
 
 
 KERNALROM   EQU     $F000 
@@ -20,19 +28,12 @@ IRQ         EQU     $FFFE
 RESET       EQU     $FFFC 
 NMI         EQU     $FFFA 
 
-LOWRAM      EQU     $0000 ;-03FF Low RAM
-IO          EQU     $0400 ;-0FFF I/O devices
-IO2         EQU     $1000 ;-1FFF I/O devices
-MAINRAM     EQU     $2000 ;-7FFF Main RAM
-SCREENRAM   EQU     $8000 ;-97FF Screen memory
-DEFAULTRAM  EQU     $9800 ;-9FFF Default RAM
-
 RAM0        EQU     $0000 ;  block 0.
 RAM1        EQU     $0100 ;  block 1.
 RAM2        EQU     $0200 ;  block 2.
 RAM3        EQU     $0300 ;  block 3.
 
-VDU0        EQU     $8000 
+VDU0        EQU     $8000 ;  First 2K of screen memory
 VDU1        EQU     $8100 
 VDU2        EQU     $8200 
 VDU3        EQU     $8300 
@@ -58,6 +59,7 @@ TEMP8       EQU     $1C
 TEMP9       EQU     $1D
 LINEL       EQU     $20 
 LINEH       EQU     $21 
+MEMSIZE     EQU     $22
 
             .ORG    reset 
             DB      $00 
@@ -75,24 +77,23 @@ START:
             LDA     # %10000000 ; 
             STA     pia + 0 ; 
 
-BLANK_SCREEN:        ; Clear Screen memory
+            ; Write incremental values to first 512K of VDU memory
+            ; If the 6847 is working at all this should produce a
+            ; display to aid diagnostics of the video circuit
 
             LDX     #0 ; Starting index
 VDU_WRITE:           
-            LDA     #32 
-            STA     VDU0,x ; block 0.
-            STA     VDU1,x ; block 1.
-            STA     VDU2,x ; block 2.
-            STA     VDU3,x ; block 3.
-            STA     VDU4,x ; block 0.
-            STA     VDU5,x ; block 1.
-            STA     VDU6,x ; block 2.
-            STA     VDU7,x ; block 3.
+            TXA 
+            STA     VDU0,x ; First 256k
+            STA     VDU1,x ; Second 256k
 
             INX      ; Move on to the next location
             BNE     VDU_WRITE ; Keep looping until we have finished.
+;            JSR     delay 
+;            JSR     delay 
+;            JSR     delay             
 
-TEST_LOW_RAM:        ; test first 1K of memory
+TEST_LOW_RAM:        ; test lower (1k) of memory
 
             LDX     #0 ; Starting index
 WRITE:               
@@ -133,13 +134,13 @@ IO_LOOP:
             STA     pia + 1 ; Write binary pattern to Port B
             STA     pia + 2 ; Write binary pattern to Port C
             INX     
-            JSR     delay           
+;            JSR     delay_short          
             BNE     IO_loop
             INY
             INY
             INY
             INY
-            BNE     IO_loop
+;            BNE     IO_loop
 
 ; Setup 8255 to put the VDG into text mode
 ; Ports of the 8255 and address line conections to the VDG
@@ -170,6 +171,11 @@ IO_LOOP:
 ; E000-EFFF DOS/Econet ROM
 ; F000-FFFF Kernal ROM
 
+; Determine size of RAM
+
+
+; Setup 6847 ready to display 
+
             LDA     #%10001010 
             STA     pia + 3 
             LDA     #%00000111 
@@ -177,13 +183,23 @@ IO_LOOP:
             LDA     #%00000000 
             STA     pia + 1 
             STA     pia + 0 
+VDU_CLEAR:  ;Clear text memory prior to main memory test
 
+            LDA     #32 
+            STA     VDU0,x ; First 256k
+            STA     VDU1,x ; Second 256k
+
+            INX      ; Move on to the next location
+            BNE     VDU_CLEAR ; Keep looping until we have finished.
+            
+            JSR     Find_mem_size
             JSR     DISPLAY_INTRO 
 
             LDA     #$80 
             STA     LINEH 
             LDA     #$60 
             STA     LINEL
+
 RAM_TESTING:         
 
 ; Set up test variables in zero page for the memory test
@@ -280,9 +296,11 @@ Delay:
             PHA      ; "   "   "   "   "   "   "   "   "
 
             LDX     #0
-
+            LDY     #0
 loop:       
             INX
+            BNE loop
+            INY
             BNE loop
 
             PLA      ; Y register.
@@ -291,7 +309,36 @@ loop:
             TAX      ; "   "   "
             PLA      ; "A" register.
             PLP      ; Flag register.
-            RTS            
+            RTS        
+Delay_short:
+            PHP      ; Save the flags onto the stack.
+            PHA      ; Save register "A" onto the stack.
+            TXA      ; Store register "X" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+            TYA      ; Store register "Y" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+
+            LDX     #0
+            LDY     #0
+loop_short:       
+            INX
+            INX
+            INX
+            INX
+            BNE loop_short
+            INY
+            INY
+            INY
+            INY
+            BNE loop_short
+
+            PLA      ; Y register.
+            TAY      ; "   "   "
+            PLA      ; X register.
+            TAX      ; "   "   "
+            PLA      ; "A" register.
+            PLP      ; Flag register.
+            RTS 
 ; ------------------------------------------------------------------------------------------
 ERROR:               ; Memory error detected
 
@@ -362,7 +409,7 @@ ERROR:               ; Memory error detected
             TAX
             LDA     LINE3,X
             STA     TEMP2
-            
+           
             LDA     TEMP3
             TAX
             LDA     LINE3,X
@@ -398,7 +445,7 @@ ERROR:               ; Memory error detected
             LDA     LINE3,X
             STA     TEMP9
             
-            LDA     TEMP2
+            LDA     TEMP2           ; Write the returned byte in error
             LDX     #0
             STA     (LINEL,X)
             
@@ -406,7 +453,7 @@ ERROR:               ; Memory error detected
             INC     LINEL
             STA     (LINEL,X)
             
-            LDA     TEMP4          
+            LDA     TEMP4           ; Write the address the error occured  
             INC     LINEL
             INC     LINEL
             STA     (LINEL,X)
@@ -423,7 +470,7 @@ ERROR:               ; Memory error detected
             INC     LINEL
             STA     (LINEL,X)
             
-            LDA     TEMP8
+            LDA     TEMP8           ; Write the expected data
             INC     LINEL
             INC     LINEL
             STA     (LINEL,X)
@@ -433,9 +480,10 @@ ERROR:               ; Memory error detected
             STA     (LINEL,X)
 
 
+            LDA     LINEL
             CLC
-            ADC     #26
-            STA     LINEL
+            ADC     #7             ; increase the line location by 1/2 screen width
+            STA     LINEL           ; to provide two columns of data
             BCC     Over
             INC     LINEH            
 Over:
@@ -447,6 +495,72 @@ Over:
             PLA      ; "A" register.
             PLP      ; Flag register.
             RTS      
+
+; -----------------------------------------------------------------------------------------
+Find_mem_size:
+; Code to find the installed memory (if its working)
+; Stores in MEMSIZE the size as a number that will be converted to the correct char code
+; When the banner is displayed
+
+            PHP      ; Save the flags onto the stack.
+            PHA      ; Save register "A" onto the stack.
+            TXA      ; Store register "X" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+            TYA      ; Store register "Y" onto the stack.
+            PHA      ; "   "   "   "   "   "   "   "   "
+
+            LDA     #01
+            STA     MEMSIZE  ; Assume 1k
+            LDA     #$55
+            STA     $2800
+            LDA     $2800
+            CMP     #$55
+            BNE     Size1
+            LDA     #$72     ; If we can write to $2800 we have at least 2k
+            STA     MEMSIZE
+Size1:
+            LDA     #$55
+            STA     $2C00
+            LDA     $2C00
+            CMP     #$55
+            BNE     Size2
+            LDA     #$73     ; If we can write to $2C00 we have at least 3k
+            STA     MEMSIZE
+Size2:
+            LDA     #$55
+            STA     $3000
+            LDA     $3000
+            CMP     #$55
+            BNE     Size3
+            LDA     #$74     ; If we can write to $3000 we have at least 4k
+            STA     MEMSIZE
+Size3:
+            LDA     #$55
+            STA     $3400
+            LDA     $3400
+            CMP     #$55
+            BNE     Size4
+            LDA     #$75     ; If we can write to $3400 we have at least 5k
+            STA     MEMSIZE
+Size4:
+            LDA     #$55
+            STA     $3800
+            LDA     $3800
+            CMP     #$55
+            BNE     Size4
+            LDA     #$76     ; If we can write to $3800 we have at least 6k
+            STA     MEMSIZE
+                            ; Anything above $3BFF is off board and can be tested
+                            ; by removing it !
+
+            PLA      ; Y register.
+            TAY      ; "   "   "
+            PLA      ; X register.
+            TAX      ; "   "   "
+            PLA      ; "A" register.
+            PLP      ; Flag register.
+            RTS      
+
 ; ------------------------------------------------------------------------------------------
 DISPLAY_INTRO:       
 
@@ -466,8 +580,13 @@ MESSAGE1:
             STA     VDU0,X 
             INX      
             TXA      
-            CMP     #19 
+            CMP     #26 
             BNE     MESSAGE1 
+
+            LDA     MEMSIZE
+            SEC
+            SBC     #$40
+            STA     $8014
 
             PLA      ; Y register.
             TAY      ; "   "   "
@@ -508,7 +627,7 @@ DISPLAY_RAM_PASS:
 LINE1:               
 ;                    1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
             DB      "A","C","O","R","N",$60,"A","T","O","M",$60,"D","I","A","G",$60 
-            DB      "R","O","M" 
+            DB      "R","O","M",$60,$60,"K",$60,"R","A","M" 
 
 LINE2:               
 ;                    0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15 
@@ -516,4 +635,3 @@ LINE2:
 
 ;                    0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F 
 LINE3:      DB      $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$01,$02,$03,$04,$05,$06     
-
