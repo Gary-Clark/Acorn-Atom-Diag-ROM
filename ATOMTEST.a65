@@ -54,6 +54,8 @@ TEMP4       EQU     $18
 TEMP5       EQU     $19 
 TEMP6       EQU     $1A 
 TEMP7       EQU     $1B 
+TEMP8       EQU     $1C
+TEMP9       EQU     $1D
 LINEL       EQU     $20 
 LINEH       EQU     $21 
 
@@ -140,13 +142,13 @@ IO_LOOP:
             BNE     IO_loop
 
 ; Setup 8255 to put the VDG into text mode
-
+; Ports of the 8255 and address line conections to the VDG
 ; AS = C6
 ; Int= C6
 ; INV= C7
 ; GM2= PA7
 ; GM1= PA6
-; GM0= Pa5
+; GM0= PA5
 ; AG = PA4
 
 ; Memory map
@@ -198,7 +200,8 @@ RAM_TESTING:
             STA     PASSH
 
 PAGE:                ; Test main memory
-            LDA     #$55 
+            LDA     #$55
+            STA     TEMP8
             STA     (MEML,X) 
             LDA     (MEML,X) 
             CMP     #$55 
@@ -207,6 +210,7 @@ PAGE:                ; Test main memory
             JSR     ERROR 
 OVER1:               
             LDA     #$AA 
+            STA     TEMP8
             STA     (MEML,X) 
             LDA     (MEML,X) 
             CMP     #$AA 
@@ -215,6 +219,7 @@ OVER1:
             JSR     ERROR 
 OVER2:               
             LDA     #$00 
+            STA     TEMP8
             STA     (MEML,X) 
             LDA     (MEML,X) 
             CMP     #$00 
@@ -223,6 +228,7 @@ OVER2:
             JSR     ERROR 
 OVER3:               
             LDA     #$FF 
+            STA     TEMP8
             STA     (MEML,X) 
             LDA     (MEML,X) 
             CMP     #$FF 
@@ -231,6 +237,7 @@ OVER3:
             JSR     ERROR 
 OVER4:               
             LDA     #$F0 
+            STA     TEMP8
             STA     (MEML,X) 
             LDA     (MEML,X) 
             CMP     #$F0 
@@ -239,6 +246,7 @@ OVER4:
             JSR     ERROR 
 OVER5:               
             LDA     #$0F 
+            STA     TEMP8
             STA     (MEML,X) 
             LDA     (MEML,X) 
             CMP     #$0F
@@ -335,6 +343,20 @@ ERROR:               ; Memory error detected
             LDA     MEML 
             AND     #%00001111 
             STA     TEMP7 
+            
+            LDA     TEMP8
+            AND     #%00001111 
+            STA     TEMP9
+            LDA     TEMP8
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            CLC      
+            ROR     A 
+            STA     TEMP8
 
             LDA     TEMP2
             TAX
@@ -365,28 +387,52 @@ ERROR:               ; Memory error detected
             TAX
             LDA     LINE3,X
             STA     TEMP7
-                       
+ 
+            LDA     TEMP8
+            TAX
+            LDA     LINE3,X
+            STA     TEMP8
+            
+            LDA     TEMP9
+            TAX
+            LDA     LINE3,X
+            STA     TEMP9
             
             LDA     TEMP2
             LDX     #0
             STA     (LINEL,X)
+            
             LDA     TEMP3
             INC     LINEL
             STA     (LINEL,X)
+            
             LDA     TEMP4          
             INC     LINEL
             INC     LINEL
             STA     (LINEL,X)
+            
             LDA     TEMP5
             INC     LINEL
             STA     (LINEL,X)
+            
             LDA     TEMP6
             INC     LINEL
             STA     (LINEL,X)
+            
             LDA     TEMP7
             INC     LINEL
             STA     (LINEL,X)
-            LDA     LINEL
+            
+            LDA     TEMP8
+            INC     LINEL
+            INC     LINEL
+            STA     (LINEL,X)
+            
+            LDA     TEMP9
+            INC     LINEL
+            STA     (LINEL,X)
+
+
             CLC
             ADC     #26
             STA     LINEL
