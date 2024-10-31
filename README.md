@@ -3,6 +3,7 @@
 Quick and simple diagnostic ROM for the Acorn Atom
 
 Program into a 4K EPROM to replace the Kernal ROM. On reset it will first attempt to set the VDG to text mode and fills the first 512 bytes with an incrememental pattern
+
 ![image](https://github.com/user-attachments/assets/277ae02c-2423-4706-83ba-40db48fd3a68)
 
 It will then test the first 1k of RAM. If an error is detected, it will continually loop, addressing the same location which can then be checked with a logic analyser or a Scope.
