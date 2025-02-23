@@ -64,6 +64,9 @@ MEMSIZE     EQU     $22
             .ORG    reset 
             DB      $00 
             DB      $f0
+            .ORG    NMI
+            DB      $00
+            DB      $f0
 
             .ORG    KERNALROM 
 START:               
@@ -89,9 +92,9 @@ VDU_WRITE:
 
             INX      ; Move on to the next location
             BNE     VDU_WRITE ; Keep looping until we have finished.
-;            JSR     delay 
-;            JSR     delay 
-;            JSR     delay             
+            JSR     delay 
+            JSR     delay 
+            JSR     delay             
 
 TEST_LOW_RAM:        ; test lower (1k) of memory
 
@@ -134,7 +137,7 @@ IO_LOOP:
             STA     pia + 1 ; Write binary pattern to Port B
             STA     pia + 2 ; Write binary pattern to Port C
             INX     
-;            JSR     delay_short          
+            JSR     delay_short          
             BNE     IO_loop
             INY
             INY
@@ -175,24 +178,33 @@ IO_LOOP:
 
 
 ; Setup 6847 ready to display 
+            
+            LDA     # %10001010 ; Port A to output, B input, C split in and out
+            STA     pia + 3 ; Write to PIA control port
+            LDA     # %10000000 ; 
+            STA     pia + 0 ;
+            STA     pia + 2 ; Set port C 0-3 outputs to 0
+            
+            
+            
+VDU_CLEAR1:  ;Clear text memory prior to main memory test
 
-            LDA     #%10001010 
-            STA     pia + 3 
-            LDA     #%00000111 
-            STA     pia + 2 
-            LDA     #%00000000 
-            STA     pia + 1 
-            STA     pia + 0 
-VDU_CLEAR:  ;Clear text memory prior to main memory test
-
-            LDA     #32 
+            LDA     #45    ; Not a space so you can see its moved on
             STA     VDU0,x ; First 256k
             STA     VDU1,x ; Second 256k
 
             INX      ; Move on to the next location
-            BNE     VDU_CLEAR ; Keep looping until we have finished.
+            BNE     VDU_CLEAR1 ; Keep looping until we have finished.
             
             JSR     Find_mem_size
+VDU_CLEAR2:            
+            LDA     #32    ; Change the pattern to indicate the memsize function has worked
+            STA     VDU0,x ; First 256k
+            STA     VDU1,x ; Second 256k
+
+            INX      ; Move on to the next location
+            BNE     VDU_CLEAR2 ; Keep looping until we have finished. 
+            
             JSR     DISPLAY_INTRO 
 
             LDA     #$80 
@@ -509,50 +521,50 @@ Find_mem_size:
             TYA      ; Store register "Y" onto the stack.
             PHA      ; "   "   "   "   "   "   "   "   "
 
-            LDA     #01
+            LDA     #72
             STA     MEMSIZE  ; Assume 1k
             LDA     #$55
             STA     $2800
             LDA     $2800
             CMP     #$55
-            BNE     Size1
+            BNE     Size_done
             LDA     #$72     ; If we can write to $2800 we have at least 2k
             STA     MEMSIZE
-Size1:
+
             LDA     #$55
             STA     $2C00
             LDA     $2C00
             CMP     #$55
-            BNE     Size2
+            BNE     Size_done
             LDA     #$73     ; If we can write to $2C00 we have at least 3k
             STA     MEMSIZE
-Size2:
+
             LDA     #$55
             STA     $3000
             LDA     $3000
             CMP     #$55
-            BNE     Size3
+            BNE     Size_done
             LDA     #$74     ; If we can write to $3000 we have at least 4k
             STA     MEMSIZE
-Size3:
+
             LDA     #$55
             STA     $3400
             LDA     $3400
             CMP     #$55
-            BNE     Size4
+            BNE     Size_done
             LDA     #$75     ; If we can write to $3400 we have at least 5k
             STA     MEMSIZE
-Size4:
+            
             LDA     #$55
             STA     $3800
             LDA     $3800
             CMP     #$55
-            BNE     Size4
+            BNE     Size_done
             LDA     #$76     ; If we can write to $3800 we have at least 6k
             STA     MEMSIZE
                             ; Anything above $3BFF is off board and can be tested
                             ; by removing it !
-
+Size_done:
             PLA      ; Y register.
             TAY      ; "   "   "
             PLA      ; X register.
